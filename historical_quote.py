@@ -71,6 +71,7 @@ class GetHistoricalQuote( object ):
             'Cookie': self.r.headers['Set-Cookie']
         }
         
+        print('sending POST request to get {} history'.format(length))
         r = self.s.post( self.url, headers=headers, data='{}|false|{}'.format(length, self.ticker))
 #        print('post response type:', type(r))  
         self.soup = BeautifulSoup(r.text, 'html.parser')
@@ -113,6 +114,7 @@ class GetHistoricalQuote( object ):
                 d[h] =  np.array( [float(r[h]) for r in self.rl] )
         self.d = d
         
+    
         f,ax = plt.subplots( figsize=(11,6) )
         ax.grid(True, axis='y')
         ax2 = ax.twinx()

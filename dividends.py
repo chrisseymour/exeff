@@ -288,21 +288,21 @@ class Puller(object):
         date = dates[3]
         return date
 
+    def FutureYield(self):
+        price = float(self.last_sale.text.strip('$'))
+        starting_div = self.sorted[ 'Amount'][0]
+        compound(cost=price , div=starting_div, percentage=self.avg_increase)
+
     def ProcessRequest(self):
         self.GetSite()
         self.SplitTable()
         self.GetDiv()
         self.SortDividendTable()
         self.PlotDivHistory()
-
-    def FutureYield(self):
-        price = float(self.last_sale.text.strip('$'))
-        starting_div = self.sorted[ 'Amount'][0]
-        compound(cost=price , div=starting_div, percentage=self.avg_increase)
-
+        self.FutureYield()
     
 if __name__=='__main__':
-    P = Puller(ticker = 'JNJ') #abbv, mo, pm, 
+    P = Puller(ticker = 'JNJ') #JNJ, KMB, PEP, MMM 
     P.GetSite()
     P.SplitTable()
     P.GetDiv()
