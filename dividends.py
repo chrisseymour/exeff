@@ -5,7 +5,7 @@ Created on Wed Jun 12 16:57:55 2019
 Web Scraping Example
 
 ex/div date and dividend growth calculator
-Enter: a ticker symbol (e.g. )
+Enter: a ticker symbol (e.g. JNJ, KMB, PEP)
 
 @author: Chris
 """
@@ -13,46 +13,45 @@ Enter: a ticker symbol (e.g. )
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from scipy.optimize import leastsq
-import collections as coll
 import numpy as np
 import datetime as dt
 import requests
+import pandas as pd
 
 from bs4 import BeautifulSoup #parsing html
 
-###avoid implicitly registered datetime converter warning
-from pandas.plotting import register_matplotlib_converters
-register_matplotlib_converters()
-###
+####avoid implicitly registered datetime converter warning
+#from pandas.plotting import register_matplotlib_converters
+#register_matplotlib_converters()
+####
+#
 
-def second_site():
-    financials = 'https://finance.yahoo.com/quote/PM/financials?p=PM'
-    balance = 'https://finance.yahoo.com/quote/PM/balance-sheet?p=PM'
-    cashflow = 'https://finance.yahoo.com/quote/PM/cash-flow?p=PM'
-    history = 'https://finance.yahoo.com/quote/PM/history?p=PM'
-    hist_period = 'https://finance.yahoo.com/quote/PM/history?period1=1205726400&period2=1561003200&interval=1d&filter=history&frequency=1d'
-    options = 'https://finance.yahoo.com/quote/PM/options?p=PM'
+
+def compound( cost, div, percentage ):
+    '''compute the hypothetical divident, and yield on cost (later...)
+    20 years out, based on an average percentage dividend increase per year
+    '''
+    print()
+    
+#    ndiv = div * ( 1 + percentage/100 )
+    original_div = div
+    print('starting div', original_div)
+    ndiv = div
+    for i in range(21):
+        ndiv *= 1 + percentage/100
+        if i==5 or i==10 or i==20:
+            print('year {}, old div {:.4}, new div {:.4}, yield on cost: {:0.4}%'.format(i, div, ndiv, 4*ndiv/cost*100) )
+        div = ndiv
 
 class Puller(object):
     def __init__(self, ticker='pm'):
-        self.points = np.array(0)
-        #self.domain = 'http://www.apmex.com/'
         self.domain = 'https://www.nasdaq.com/symbol/'
-        #dm2 = 'https://www.nyse.com/quote/XNYS:MMM'
-#        d-button-normal d-button-dropdown
-#        react-datepicker__input-container
-#        react-datepicker__input-container
-#        class="d-button-normal"
         self.ticker = ticker
-        self.url = '{}/dividend-history'.format( ticker )
         
         
-        
-        
-        self.div = [] #{}
-        self.exdiv = {}
         
     def GetSite(self):
+        self.url = '{}/dividend-history'.format( self.ticker )
         url = self.url
         result = requests.get( ''.join( (self.domain, url) ) )
         self.soup = BeautifulSoup(result.content, "lxml")
@@ -80,6 +79,7 @@ class Puller(object):
 #        return productname, prs
         
     def GetDiv(self):
+        self.div = []
 #        self.header_text = [rt.text.strip() for rt in self.headers]
         self.row_text = [rt.text.strip().split() for rt in self.rows]
         self.header_text = self.row_text.pop(0)
@@ -96,7 +96,7 @@ class Puller(object):
             # determine the type conversion based on the key
             if h=='Ex/Eff' or h=='Declaration':
                 
-                self.sorted[h] = [ d[h].split('/') for d in P.div ]
+                self.sorted[h] = [ d[h].split('/') for d in self.div ]
                 
                 for i,hnew in enumerate( self.sorted[h] ):
                     date = hnew[-1:]+hnew[:2]
@@ -118,37 +118,53 @@ class Puller(object):
                 f = str
             # convert the type, and then
             #   create a dict entry consisting of each entry for that header
-            self.sorted[h] = [f(d[h]) for d in P.div]
+            self.sorted[h] = [f(d[h]) for d in self.div]
 
     def PlotDivHistory(self):
-        f,ax = plt.subplots()
-        ax.set_title(self.name.text)
+#        f,ax = plt.subplots()
+        f,ax = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(5,6), gridspec_kw={'height_ratios': [3, 2]})
+        
+        ax[0].set_title(self.name.text.replace('Date &', ''))
 #        print('type', type(self.sorted[ 'Ex/Eff']))
 #        print(self.sorted[ 'Ex/Eff'])
-        ax.plot_date( self.sorted[ 'Ex/Eff'], self.sorted[ 'Amount' ], label='Amount vs Ex/Eff Date' )
-        
-        self.FitDivHistory(ax)
-        xs, ys = self.FindDivIncreases()
-        ax2 = ax.twinx()
-        ax2.plot(xs, ys, 'x', markersize=8, color='red', label='div increase percentage')
-        ax2.set_ylabel('(%)')
-        ylims = ax2.get_ylim()
-        if ylims[0] > 0:
-            ax2.set_ylim(0, ylims[1])
-        print('last sale price {}'.format(P.last_sale.text))
+        ax[0].plot_date( self.sorted[ 'Ex/Eff'], self.sorted[ 'Amount' ], label='Amount vs Ex/Eff Date' )
+        ax[1].set_xlabel('Date')
+        self.FitDivHistory(ax[0])
+        inc_dates, inc_amnts = self.FindDivIncreases()
+#        ax2 = ax[0].twinx()
+#        ax2 = ax[1]
+        ax[1].plot(inc_dates, inc_amnts, 'x', markersize=8, color='red', label='div increase percentage')
+        ax[1].set_ylabel('Percentage Increase (%)')
+#        ylims = ax[1].get_ylim()
+#        if ylims[0] > 0:
+#            ax[1].set_ylim(0, ylims[1])
+        print('last sale price {}'.format(self.last_sale.text))
         price = float(self.last_sale.text.replace('$',''))
         yoc = self.sorted[ 'Amount' ][0]*4/price*100
         print('current yield on cost = {:.4f}%'.format(yoc))
+    
+    def PlotYearlyDivs(self):
         #get yearly total numbers and number or div payments, then plot them
         self.GetYearlyDivs()
         yearkey = sorted( list( self.yearly.keys() ) )
         
         years = [dt.datetime(int(y), 12, 31) for y in yearkey] #convert year to datetime dec 31 of the year divs are added for
         yearval = [self.yearly[k][0] for k in yearkey]
-        ax3 = ax.twinx()
+        #ax3 = ax.twinx()
+        '''
+        ax3 = ax[1]
         ax3.plot_date(years, yearval, '>', color='green', label='yearly dividend' )
         ax3.tick_params(axis='y', direction='in', pad=-20, labelcolor='green')
         ax3.set_ylabel('yearly div ($)', color='green', labelpad=-30)
+        '''
+        f2,axh = plt.subplots()
+
+        df = pd.DataFrame(data=inc_amnts)
+#        print('mean', df[0].mean() )
+#        print('median', df[0].median() )
+        upper_limit = 2*df[0].mean()
+        axh.hist( df[0] )
+#        plt.hist()
 #        ax.show()
 
     def FitDivHistory(self, ax):
@@ -173,31 +189,27 @@ class Puller(object):
         ax.plot(x, yy1)
     
     def FindDivIncreases(self):
-        '''edit to find dividened cuts as well
-        "FindDivChange()"
+        '''get the divdednd increase of decrease associated with 
+        each change in the dividend
         '''
         x = np.array( self.sorted[ 'Ex/Eff'] )
         y = np.array( self.sorted[ 'Amount' ] )
+        
         for X,Y in zip( reversed(x), reversed(y) ):
             print("{} on {}".format(Y,  X.strftime("%B %d, %Y")))
 #        xdif = x[:-1] - x[1:]
         ydif = y[:-1] - y[1:]
-#        print('ydif', ydif)
-#        xy = zip(x,y)
-#        print('xy', xy)
+
         inc_dates = []
         inc_amnts = []
-        for i,x1,y1, ye in zip(np.arange(len(x)),x,y,ydif):
-#            print(i, x1, y1, ydif)
-            
+        for i,x1,y1, ye in zip( reversed(np.arange(len(x))), reversed(x), reversed(y), reversed(ydif)):
+        #for i,x1,y1, ye in zip(np.arange(len(x)),x,y,ydif):
             if ye != 0:
                 increase = ye/y[i+1]*100
                 print('div increase of ${:.4f}, from ${} to ${}. An increase of {:.2f}%, on {}'.format(ye, y[i+1], y[i], increase , x[i].strftime("%B %d, %Y")))
                 inc_dates.append( x[i] )
                 inc_amnts.append( increase )
-        
-#                print('inc dates {}, in amnts {}'.format( inc_dates, inc_amnts))
-#        print(24, x[1], y[-1], 0)
+
         today = dt.datetime.now()
         
         print()
@@ -207,28 +219,27 @@ class Puller(object):
             ###include previous date i.e. x[1]
         else:
 #            print('upcoming date is  greater')
-            P.PredictedDeclarationDate()
+            self.PredictedDeclarationDate()
             word =  'most recent' 
             ###include predicted next date by looking at one 'x[3]' ex/div dates ago 
             ###   (wont work for some that have erratic div payouts, but can filter by number of divs per year)
         print('{} dividend ex/div date {},  ${}\n'.format(word, x[0].strftime("%B %d, %Y"), y[0]) )
+        self.avg_increase = sum(inc_amnts)/len(inc_amnts)
+        
         return inc_dates, inc_amnts
     
 
     def GetYearlyDivs(self):
         x = np.array( self.sorted[ 'Ex/Eff'] )
         y = np.array( self.sorted[ 'Amount' ] )
-        d = {}
-#        c = coll.Counter()  
+        d = {} 
         for X,Y in zip(x,y):
             year, amnt = X.strftime("%Y"), Y
-#            print('year {}, amount {}'.format(year, amnt))
             if year not in d:
                 d[year] = []
             d[year].append( amnt )
         self.yearly = {}
         for k,D in d.items():
-#            print('year {} total payed ${:.4} in {} div payments'.format(k, sum(D), len(D)))
             self.yearly[k] = (sum(D), len(D))
         for k, yt in reversed(list( self.yearly.items() )):
             print('year {} total payed ${:.4} in {} div payments'.format(k, yt[0], yt[1]))
@@ -256,18 +267,12 @@ class Puller(object):
         
         url = '{}/historical'.format( self.ticker )
         site = ''.join( (self.domain, url) )
-#        result = requests.get( ''.join( (self.domain, url) ) )
-#        result = requests.get( site )
-        
         s = requests.Session()
         r = s.get( site )
-#        self.soup = BeautifulSoup(r.text, 'html.parser')
         self.soup = BeautifulSoup(r.content, "lxml")
         print( 'soup2 ', self.soup )
         
         self.select = self.soup.find('select', {'id': "ddlTimeFrame"})
-        
-        
         print(self.select)
         
         print()
@@ -283,18 +288,17 @@ class Puller(object):
         date = dates[3]
         return date
 
-def compound( div, percentage=5.0 ):
-    '''compute the hypothetical divident, and yield on cost (later...)
-    20 years out, based on an average percentage dividend increase per year
-    '''
-#    ndiv = div * ( 1 + percentage/100 )
-    original_div = div
-    ndiv = div
-    for i in range(20):
-        ndiv *= 1 + percentage/100
-        print('year {}, old div {:.4}, new div {:.4}, '.format(i, div, ndiv) )
-        div = ndiv
-        
+    def ProcessRequest(self):
+        self.GetSite()
+        self.SplitTable()
+        self.GetDiv()
+        self.SortDividendTable()
+        self.PlotDivHistory()
+
+    def FutureYield(self):
+        price = float(self.last_sale.text.strip('$'))
+        starting_div = self.sorted[ 'Amount'][0]
+        compound(cost=price , div=starting_div, percentage=self.avg_increase)
 
     
 if __name__=='__main__':
@@ -305,6 +309,7 @@ if __name__=='__main__':
     P.SortDividendTable()
 #    P.GetYearlyDivs()
     P.PlotDivHistory()
+    P.FutureYield()
 #    P.FindDivIncreases()
     
 
