@@ -21,8 +21,8 @@ import pandas as pd
 from bs4 import BeautifulSoup #parsing html
 
 ####avoid implicitly registered datetime converter warning
-#from pandas.plotting import register_matplotlib_converters
-#register_matplotlib_converters()
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
 ####
 #
 
@@ -31,11 +31,9 @@ def compound( cost, div, percentage ):
     '''compute the hypothetical divident, and yield on cost (later...)
     20 years out, based on an average percentage dividend increase per year
     '''
-    print()
-    
 #    ndiv = div * ( 1 + percentage/100 )
     original_div = div
-    print('starting div', original_div)
+    print('\nstarting div: {}, cost basis: {}, average div increase of {:0.4}%'.format( original_div, cost, percentage))
     ndiv = div
     for i in range(21):
         ndiv *= 1 + percentage/100
@@ -123,6 +121,7 @@ class Puller(object):
     def PlotDivHistory(self):
 #        f,ax = plt.subplots()
         f,ax = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(5,6), gridspec_kw={'height_ratios': [3, 2]})
+        ax[0].set_ylabel('dividend paid ($)')
         
         ax[0].set_title(self.name.text.replace('Date &', ''))
 #        print('type', type(self.sorted[ 'Ex/Eff']))
@@ -142,8 +141,10 @@ class Puller(object):
         price = float(self.last_sale.text.replace('$',''))
         yoc = self.sorted[ 'Amount' ][0]*4/price*100
         print('current yield on cost = {:.4f}%'.format(yoc))
+        self.PlotYearlyDivs(ax[0].twinx())
+        
     
-    def PlotYearlyDivs(self):
+    def PlotYearlyDivs(self, ax):
         #get yearly total numbers and number or div payments, then plot them
         self.GetYearlyDivs()
         yearkey = sorted( list( self.yearly.keys() ) )
@@ -151,11 +152,11 @@ class Puller(object):
         years = [dt.datetime(int(y), 12, 31) for y in yearkey] #convert year to datetime dec 31 of the year divs are added for
         yearval = [self.yearly[k][0] for k in yearkey]
         #ax3 = ax.twinx()
-        '''
-        ax3 = ax[1]
+        
+        ax3 = ax
         ax3.plot_date(years, yearval, '>', color='green', label='yearly dividend' )
-        ax3.tick_params(axis='y', direction='in', pad=-20, labelcolor='green')
-        ax3.set_ylabel('yearly div ($)', color='green', labelpad=-30)
+        ax3.tick_params(axis='y', direction='out', labelcolor='green') #, pad=-20
+        ax3.set_ylabel('yearly div ($)', color='green') # , labelpad=-30
         '''
         f2,axh = plt.subplots()
 
@@ -166,6 +167,7 @@ class Puller(object):
         axh.hist( df[0] )
 #        plt.hist()
 #        ax.show()
+        '''
 
     def FitDivHistory(self, ax):
         x = np.array( self.sorted[ 'Ex/Eff'] )
@@ -180,17 +182,18 @@ class Puller(object):
         ErrorFunc=lambda tpl,x,y: func(tpl,x)-y
         #tplInitial contains the "first guess" of the parameters 
         tplInitial1=(1.0,2.0)
-        # leastsq finds the set of parameters in the tuple tpl that minimizes
-        # ErrorFunc=yfit-yExperimental
+        
         tplFinal1,success= leastsq(ErrorFunc,tplInitial1[:],args=(x,y))
-        print (" linear fit ",tplFinal1)
-#        xx1=np.linspace(x.min(),x.max(),50)
+        print ('linear fit results',tplFinal1)
+
         yy1=func(tplFinal1,x)
         ax.plot(x, yy1)
     
     def FindDivIncreases(self):
         '''get the divdednd increase of decrease associated with 
         each change in the dividend
+        
+        need to add a filter to handle divs paid beyond the standard quarterly
         '''
         x = np.array( self.sorted[ 'Ex/Eff'] )
         y = np.array( self.sorted[ 'Amount' ] )
@@ -289,8 +292,10 @@ class Puller(object):
         return date
 
     def FutureYield(self):
+        
         price = float(self.last_sale.text.strip('$'))
         starting_div = self.sorted[ 'Amount'][0]
+        
         compound(cost=price , div=starting_div, percentage=self.avg_increase)
 
     def ProcessRequest(self):

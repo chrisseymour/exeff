@@ -115,7 +115,7 @@ class GetHistoricalQuote( object ):
         self.d = d
         
     
-        f,ax = plt.subplots( figsize=(11,6) )
+        f,ax = plt.subplots( figsize=(11,6) ) ###on desktop... figsize=(11,6)
         ax.grid(True, axis='y')
         ax2 = ax.twinx()
         colors = np.empty( len(d['Date']) , dtype=str )
