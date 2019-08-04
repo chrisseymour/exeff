@@ -115,7 +115,9 @@ class GetHistoricalQuote( object ):
         self.d = d
         
     
-        f,ax = plt.subplots( figsize=(11,6) ) ###on desktop... figsize=(11,6)
+#        f,ax = plt.subplots( figsize=(11,6) ) ###on desktop... figsize=(11,6)
+        f, axs = plt.subplots( nrows=2, ncols=1, figsize=(12,8) )
+        ax = axs[0]
         ax.grid(True, axis='y')
         ax2 = ax.twinx()
         colors = np.empty( len(d['Date']) , dtype=str )
@@ -141,12 +143,15 @@ class GetHistoricalQuote( object ):
         ax.set_ylabel('Price ($)')
         ax2.set_ylabel('Volume')
         f.show()
+        return f,axs[1]
 
        
     def ProcessRequest(self, length):
+        '''complete historical quote puller and analysis algorithm
+        returns the subplot to add the "Historical (Starting) Yield on Cost"'''
         self.GetTable(length=length)
         self.PlotRows()
-        self.SortRowList()
+        return self.SortRowList()
         
 if __name__=='__main__':
     

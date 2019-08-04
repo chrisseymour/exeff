@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
         
-def HistoricalYieldOnCost(divs, prices, ticker, output=False):
+def HistoricalYieldOnCost(divs, prices, ticker, axis, output=False):
     '''plot the historical, forward yield on cost
     get this by multiplying the most recently announced div at the time by four
     then dividing by the share price at that time
@@ -28,18 +28,25 @@ def HistoricalYieldOnCost(divs, prices, ticker, output=False):
     
     ###check to see what dividend investors were expecting at each moment in the past
     for date in  d['Date']:  ###loop over each day we have a price for
-        mdif = dt.timedelta(days=89)
+        mdif = dt.timedelta(days=100)
         exdate = 0
         ###loop through possible dividend dates, to find the closest one, and the size of the div at that time
-        for x,amnt in zip(divs['Ex/Eff'], divs['Amount']):  
+#        for x,amnt in zip(divs['Ex/Eff'], divs['Amount']):  
+        for x,amnt in zip(divs['Declaration'], divs['Amount']):  
             '''loop to determine the dividend investors are expecting to recieve for the next year
             at the time of purchase'''
+            
             dif = abs( date-x )
+            #print( 'date {}, amnt {}, dif {}'.format(x, amnt, dif) )
             if dif < mdif:
                 mdif = dif
                 exdate = x
                 amount = amnt
-        exp_yield.append(amount)
+        try:
+            exp_yield.append(amount)
+        except:
+            print('no "amount", does this cause incorrect behavior?')
+            print('mdif {}, exdiv {}, date {}, dif {}'.format(mdif, exdate, date, dif) )
         if output:
             print('for {} the best Ex/Div-date  is {}: dif={}; div={}'.format(date, exdate, mdif, amount))
     
@@ -47,7 +54,8 @@ def HistoricalYieldOnCost(divs, prices, ticker, output=False):
     exp_yield = np.array(exp_yield)
 #    plt.plot(d['Date'], exp_yield, '.')  #test plot to verify correct div information
     
-    f,ax = plt.subplots( figsize=(11,6) ) #on desktop... figsize=(11,6)
+#    f,ax = plt.subplots( figsize=(11,6) ) #on desktop... figsize=(11,6)
+    f, ax = axis
     ax.set_title( '{} Historical Expected Yield on Cost'.format( ticker.upper() ) )
     ax.set_xlabel('Date')
     ax.set_ylabel('Expected Yield (%)')
@@ -62,6 +70,7 @@ def HistoricalYieldOnCost(divs, prices, ticker, output=False):
             colors[i] = 'r'
         else:
             colors[i] = 'g'
+#    return exp_yield, d['Open'], d['Close']
     ######Expected YOC is 4*div at that time divided by the current trading price
     ###calculate the 'top' positions (i.e. the hieight) for each bar graph   
     tops = (4*exp_yield/d['Open']-4*exp_yield/d['Close'])*100
@@ -86,15 +95,16 @@ def HistoricalYieldOnCost(divs, prices, ticker, output=False):
     ax2.set_ylim( 0, max(d['Volume'])*4.5 )
     
     f.autofmt_xdate()  ###datetime x-axis plotting
+    plt.tight_layout()
     f.show()
     
         
 if __name__=='__main__':
-    ticker = 'JNJ'  #e.g. JNJ, PEP, KMB, MMM
+    ticker = 'cat'  #e.g. JNJ, PEP, KMB, MMM
     G = GetHistoricalQuote( ticker )
-    G.ProcessRequest(length = '6y') ###'6y' standard for typical NASDAQ div history
+    f,lower_subplot = G.ProcessRequest(length = '6y') ###'6y' standard for typical NASDAQ div history
     P = Puller(ticker = ticker)
     P.ProcessRequest()
-    
-    HistoricalYieldOnCost(P.sorted, G.d, ticker=ticker)
+#    f,ax = plt.subplots( figsize=(11,6) )
+    res = HistoricalYieldOnCost(P.sorted, G.d, ticker=ticker, axis=(f,lower_subplot))
     

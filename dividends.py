@@ -81,10 +81,12 @@ class Puller(object):
 #        self.header_text = [rt.text.strip() for rt in self.headers]
         self.row_text = [rt.text.strip().split() for rt in self.rows]
         self.header_text = self.row_text.pop(0)
+        print('h0', self.header_text)
         self.header_text = ['Ex/Eff', 'Type', 'Amount',
             'Declaration', 'Record', 'Payment']
 #        print( 'headers', self.header_text)
 #        print( 'rows[0]', self.row_text[0])
+        print('h1', self.header_text)
         for rt in self.row_text:
             self.div.append( dict(zip( self.header_text, rt )) )
 
@@ -205,8 +207,8 @@ class Puller(object):
 
         inc_dates = []
         inc_amnts = []
-        for i,x1,y1, ye in zip( reversed(np.arange(len(x))), reversed(x), reversed(y), reversed(ydif)):
-        #for i,x1,y1, ye in zip(np.arange(len(x)),x,y,ydif):
+#        for i,x1,y1, ye in zip( reversed(np.arange(len(x))), reversed(x), reversed(y), reversed(ydif)):
+        for i,x1,y1, ye in zip(np.arange(len(x)),x,y,ydif):
             if ye != 0:
                 increase = ye/y[i+1]*100
                 print('div increase of ${:.4f}, from ${} to ${}. An increase of {:.2f}%, on {}'.format(ye, y[i+1], y[i], increase , x[i].strftime("%B %d, %Y")))
