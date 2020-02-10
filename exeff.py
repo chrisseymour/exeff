@@ -96,15 +96,18 @@ def HistoricalYieldOnCost(divs, prices, ticker, axis, output=False):
     
     f.autofmt_xdate()  ###datetime x-axis plotting
     plt.tight_layout()
-    f.show()
+    plt.savefig(f'historic_yield_{ticker}.pdf', encoding='pdf')
+    plt.savefig(f'historic_yield_{ticker}.png')
+    plt.show()
     
         
 if __name__=='__main__':
-    ticker = 'cat'  #e.g. JNJ, PEP, KMB, MMM
-    G = GetHistoricalQuote( ticker )
-    f,lower_subplot = G.ProcessRequest(length = '6y') ###'6y' standard for typical NASDAQ div history
+    ticker = 'JNJ'  #e.g. JNJ, PEP, KMB, MMM
+    
     P = Puller(ticker = ticker)
     P.ProcessRequest()
 #    f,ax = plt.subplots( figsize=(11,6) )
+    G = GetHistoricalQuote( ticker )
+    f,lower_subplot = G.ProcessRequest(length = '6y') ###'6y' standard for typical NASDAQ div history
     res = HistoricalYieldOnCost(P.sorted, G.d, ticker=ticker, axis=(f,lower_subplot))
     

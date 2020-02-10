@@ -18,6 +18,14 @@ import datetime as dt
 import requests
 import pandas as pd
 
+#selenium to deal with Nasdaq changes
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
+
 from bs4 import BeautifulSoup #parsing html
 
 ####avoid implicitly registered datetime converter warning
@@ -47,30 +55,83 @@ class Puller(object):
         self.ticker = ticker
         
         
-        
     def GetSite(self):
         self.url = '{}/dividend-history'.format( self.ticker )
         url = self.url
-        result = requests.get( ''.join( (self.domain, url) ) )
-        self.soup = BeautifulSoup(result.content, "lxml")
+        #result = requests.get( ''.join( (self.domain, url) ), wait=5, stream=True )
+        #self.soup = BeautifulSoup(result.content, "lxml")
+        
+        #get the size with selenium instead of requests
+        options = Options()
+        options.headless = True
+        options=None  #uncomment this line for testing
+        #need to change path to geckodriver
+        self.browser = webdriver.Firefox( options=options, executable_path='/home/chris/Gecko/geckodriver')
+        waiter = True
+        if waiter:
+            self.browser.implicitly_wait(20)
+            self.browser.get( ''.join( (self.domain, url) ) )
+            html = self.browser.page_source
+            self.browser.quit()
+
+        else:
+            self.browser.get( ''.join( (self.domain, url) ) )
+            element = WebDriverWait(self.browser, 25).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "dividend-history__table"))
+            )
+            print(element.text)
+        #delay = 20
+        #try:
+        #    myElem = WebDriverWait(self.browser, delay).until(EC.presence_of_element_located((By.CLASS_NAME,'dividend-history__table')))
+        #    print("Page is ready!")
+        #except TimeoutException:
+         #   print("Loading took too much time!")
+       
+        
+        #html = self.browser.page_source
+        self.soup = BeautifulSoup(html, "lxml")
+        #self.soup = BeautifulSoup(element, "lxml")
         
 #        productname = soup.title.text.split('|')[0]
 #        print(productname)
-        self.name = self.soup.find('div', {'id': 'qwidget_pageheader'})
-        self.last_sale = self.soup.find('div', {'id': 'qwidget_lastsale'})
+        #self.name = self.soup.find('div', {'id': 'qwidget_pageheader'})
+        self.name = self.soup.find('span', {'class': 'quote-bar__name' })
+        #self.last_sale = self.soup.find('div', {'id': 'qwidget_lastsale'})
+        self.last_sale = self.soup.find('span', {'class':'quote-bar__pricing-price' })
+        print('name', self.name)
+        print( 'last_sale', self.last_sale )
 #        self.name = self.soup.find('div', {'class': 'quotebar-wrap'})
 #        self.name = self.table.findChildren([ 'h1' ])
         
     def SplitTable( self ): 
-        self.tableclassname = "quotes_content_left_dividendhistoryGrid"
-        self.table = self.soup.find('table', {'id': self.tableclassname})
-#        print(self.soup)
+        #self.tableclassname = "quotes_content_left_dividendhistoryGrid"
+        #self.table = self.soup.find('table', {'id': self.tableclassname})
+        self.table = self.soup.find('table', {'class': 'dividend-history__table'})
+        #print('table\n', self.table)
+        #print(self.soup)
         self.table_text = str( self.table.text )
-#        print(self.table_text)
+        #print(repr(self.table_text))
         self.bs = self.table_text.split()
         self.href = self.table.findChildren([ 'href' ])
-        self.headers = self.table.findChildren([ 'th' ])
+        #self.headers = self.table.findChildren([ 'th' ])
         self.rows = self.table.findChildren([ 'tr' ])
+        self.row_text = []
+        for i,row in enumerate(self.rows):
+            thisrow = []
+            #print(repr(row.text))
+            if i==0:
+                self.headers = [rr.text for rr in row.find_all( 'th' )]
+            else:
+
+                exeff = row.find('th').text
+                #print(i,'ex/eff', exeff)
+                cols = row.find_all('td')
+                thisrow.append( exeff )
+                for j,col in enumerate(cols):
+                    #print(i,j, col.text)
+                    thisrow.append( col.text )
+                self.row_text.append( thisrow )
+
 #        self.loop_table()
 #        prs = ( bs[:3], bs[6:11], bs[11:16], bs[16:] )
 #        #for b in prices: print(b)
@@ -79,9 +140,9 @@ class Puller(object):
     def GetDiv(self):
         self.div = []
 #        self.header_text = [rt.text.strip() for rt in self.headers]
-        self.row_text = [rt.text.strip().split() for rt in self.rows]
-        self.header_text = self.row_text.pop(0)
-        print('h0', self.header_text)
+        #self.row_text = [rt.text.strip().split() for rt in self.rows]
+        #self.header_text = self.row_text.pop(0)
+        print('h0', self.headers )
         self.header_text = ['Ex/Eff', 'Type', 'Amount',
             'Declaration', 'Record', 'Payment']
 #        print( 'headers', self.header_text)
@@ -114,15 +175,17 @@ class Puller(object):
                 continue
             elif h == 'Amount':
                 f = float  
+                self.sorted[h] = [f(d[h].replace('$', '')) for d in self.div]
             else:
                 f = str
             # convert the type, and then
             #   create a dict entry consisting of each entry for that header
-            self.sorted[h] = [f(d[h]) for d in self.div]
+                #print('d\n', d)
+                self.sorted[h] = [f(d[h]) for d in self.div]
 
     def PlotDivHistory(self):
 #        f,ax = plt.subplots()
-        f,ax = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(5,6), gridspec_kw={'height_ratios': [3, 2]})
+        f,ax = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(10,12), gridspec_kw={'height_ratios': [3, 2]}, dpi=200)
         ax[0].set_ylabel('dividend paid ($)')
         
         ax[0].set_title(self.name.text.replace('Date &', ''))
@@ -144,6 +207,9 @@ class Puller(object):
         yoc = self.sorted[ 'Amount' ][0]*4/price*100
         print('current yield on cost = {:.4f}%'.format(yoc))
         self.PlotYearlyDivs(ax[0].twinx())
+        plt.savefig(f'div_plots_{self.ticker}.pdf', encoding='pdf')
+        plt.savefig(f'div_plots_{self.ticker}.png')
+        plt.show()
         
     
     def PlotYearlyDivs(self, ax):
@@ -307,6 +373,7 @@ class Puller(object):
         self.SortDividendTable()
         self.PlotDivHistory()
         self.FutureYield()
+        
     
 if __name__=='__main__':
     P = Puller(ticker = 'JNJ') #JNJ, KMB, PEP, MMM 

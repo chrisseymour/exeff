@@ -10,7 +10,6 @@ import numpy as np
 import datetime as dt
 import requests
 
-
 from bs4 import BeautifulSoup #parsing html
 
 ###avoid implicitly registered datetime converter warning
@@ -20,6 +19,8 @@ register_matplotlib_converters()
 
 
 def FixDate(date):
+    if ',' in date:
+        date = date.strip(',')
     Date = date.split('/')
     Date = [ int(d) for d in [Date[-1]]+Date[:-1] ]
     Date = dt.datetime( *Date )
@@ -27,20 +28,46 @@ def FixDate(date):
 
 
 class GetHistoricalQuote( object ):
-    def __init__( self, ticker='jnj', timeframe=('y', 10)):
+    def __init__( self, ticker='jnj', timeframe=('y', 6)):
         '''NASDAQ historical data'''
         self.ticker = ticker.lower()
+        ''' # no longer works...table doesn't load...need to use download link
         self.domain = 'https://www.nasdaq.com/symbol/'
-    
+        
         url = '{}/historical'.format( self.ticker )
         self.url = ''.join( (self.domain, url) )
         print('url:', self.url)
-#        result = requests.get( ''.join( (self.domain, url) ) )
-#        result = requests.get( site )
+        '''
+        #one month history
+        #https://www.nasdaq.com/api/v1/historical/JNJ/stocks/2020-01-09/2020-02-09
+        #5 year history link
+        #https://www.nasdaq.com/api/v1/historical/JNJ/stocks/2015-02-09/2020-02-09
+        #make sure to handle leap-year, otherwise use the same 'day' minus 5 years
+        today = dt.date.today()
+        if timeframe[0] == 'y':
+            nyears = timeframe[1]
+            nmonths = 0
+        elif timeframe[0] == 'm':
+            nyears = 0
+            nmonths = timeframe[1]
+        else:
+            nyears = 0
+            nmonths = 1
         
-        self.s = requests.Session()
-        self.r = self.s.get( self.url )
+        end = dt.date(  today.year-nyears, today.month-nmonths, today.day ) 
+        start, end =  end.isoformat(), today.isoformat()
+        print('start date:', start, 'end date:', end)
+        ##create the url with the ticker and time frame
+        self.url = f'https://www.nasdaq.com/api/v1/historical/{self.ticker}/stocks/{start}/{end}'
+        print(self.url)
+        #possibly take longer than 5 years to match up with div history...
+        self.r = requests.get(  self.url )
+        
+        #self.s = requests.Session()
+        #self.r = self.s.get( self.url )
         self.soup = BeautifulSoup( self.r.content, "lxml")
+        
+        #print( self.soup.prettify() )
 #        print( 'soup2 ', self.soup )
         ''' print the response header inputs
         for k,h in self.r.headers.items():
@@ -57,49 +84,29 @@ class GetHistoricalQuote( object ):
         ## get the options from the 'TimeFrame' <select> form
 #        self.select = self.soup.find('select', {'id': "ddlTimeFrame"})
 #        print('select', self.select)  #list the possible timeframe options
-        headers = {
-            'Host': 'www.nasdaq.com',
-            #'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Referer': self.url,
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Length': '12',
-            'Connection': 'keep-alive',
-            'Cookie': self.r.headers['Set-Cookie']
-        }
+        table = self.soup.find( 'p' ).text
         
-        print('sending POST request to get {} history'.format(length))
-        r = self.s.post( self.url, headers=headers, data='{}|false|{}'.format(length, self.ticker))
-#        print('post response type:', type(r))  
-        self.soup = BeautifulSoup(r.text, 'html.parser')
-#        self.soup = BeautifulSoup(r.content, "lxml")    
-        table_div = ('div', {'id': 'quotes_content_left_pnlAJAX'} )
-        self.td = self.soup.find( *table_div )
-        self.table_header = self.td.find('h3')
-        self.table = self.td.find('table')
-#        print(self.table_header.text)   
+        lines = table.split('\n')
+        self.rows = [line for line in lines if line]
+        #print( repr(table) )
+        #print( len( lines ) )
         
-        print('status code returned: {}'.format( r.status_code ))
-        ''' print the response header inputs
-        for k,h in r.headers.items():
-            print('headers[{}]: {}'.format( k,h ))
-        '''
-        self.rows = self.table.findChildren([ 'tr' ])
         
     def PlotRows(self):
         
-        headers = self.rows.pop(0)
-        self.rows.pop(0)
-        
-        headers = 'Date Open High Low Close Volume'.split()
+        headers = self.rows.pop(0).split(', ')
+        headers[1] = headers[1].replace('/Last', '') #change 'Close/Last' to just 'Close'
+        #self.rows.pop(0)
         self.headers = headers
+        #print('headers', headers)
+                
+        #print('rows', self.rows)
         
         self.rl = []
         for i,r in enumerate(self.rows):
-            data = r.text.strip().split()
+            #data = r.text.strip().split()  #format change...
+            data = r.split(', ')
+            data = [d.replace('$', '') if '$' in d else d for d in data]
             self.rl.append( dict(zip(headers, data))  )
 
 
@@ -116,7 +123,7 @@ class GetHistoricalQuote( object ):
         
     
 #        f,ax = plt.subplots( figsize=(11,6) ) ###on desktop... figsize=(11,6)
-        f, axs = plt.subplots( nrows=2, ncols=1, figsize=(12,8) )
+        f, axs = plt.subplots( nrows=2, ncols=1, figsize=(14,10), dpi=200 )
         ax = axs[0]
         ax.grid(True, axis='y')
         ax2 = ax.twinx()
@@ -126,13 +133,13 @@ class GetHistoricalQuote( object ):
                 colors[i] = 'r'
             else:
                 colors[i] = 'g'
-                
+        alpha = 0.7      
         ax.errorbar(d['Date'], (d['High']-d['Low'])/2+d['Low'], yerr=(d['High']-d['Low'])/2,
-                    linewidth=0.4, linestyle='', color='grey', alpha=0.55)
-        ax.bar(d['Date'], d['Open']-d['Close'], bottom=d['Close'], color=colors, alpha=0.75)#, align='edge')
+                    linewidth=0.4, linestyle='', color='grey', alpha=alpha )
+        ax.bar(d['Date'], d['Open']-d['Close'], bottom=d['Close'], color=colors, alpha=alpha, linewidth=1.0 )#, align='edge')
         
 
-        ax2.bar( d['Date'], d['Volume'] , color=colors, alpha=0.6)#, align='edge')
+        ax2.bar( d['Date'], d['Volume'] , color=colors, alpha=alpha )#, align='edge')
 #        ax2.bar( range(len(d['Date'])), d['Volume'] )
         ax.set_ylim( min(d['Low'])/1.05, ax.get_ylim()[1] )
         ax2.set_ylim( 0, max(d['Volume'])*4.5 )
@@ -142,7 +149,9 @@ class GetHistoricalQuote( object ):
         ax.set_xlabel('Date')
         ax.set_ylabel('Price ($)')
         ax2.set_ylabel('Volume')
-        f.show()
+        #plt.savefig('testplot.pdf', encoding='pdf')
+        #plt.savefig('testplot.png')
+        #plt.show()
         return f,axs[1]
 
        

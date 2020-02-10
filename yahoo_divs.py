@@ -168,6 +168,8 @@ if __name__=='__main__':
     dd = YH.SortDivs()
     f,ax = plt.subplots()
     ax.plot(dd['Date'], dd['Amnt'], '.')
+    ax.set_title(f'dividend history for ticker: {YH.ticker}')
+    ax.set_ylabel('dollars')
 #    print(dd['Amnt'])
     inc_dates, incs = YH.FindDivIncreases( )
 #    ax2 = ax.twinx()
@@ -178,5 +180,6 @@ if __name__=='__main__':
     plt.title('div increase distribution')
     plt.xlabel('increase (%)')
     plt.ylabel('occurances')
+    plt.savefig('yahoo_divs.png')
 #    print( sum(incs)/len(incs))
     
